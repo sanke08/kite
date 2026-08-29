@@ -1,0 +1,19 @@
+# Build artifacts. The REPL runs via `go run ./cmd/kite`; if a binary ever
+# gets built into the repo root it is a mistake, not something to commit.
+/kite
+*.test
+*.out
+
+# Database files produced by running the REPL or the test suite.
+#
+# WHY: from Phase 12 on, tests write real 4096-byte-paged files. Committing one
+#      pins a file-format version into git history that the next format change
+#      silently invalidates.
+*.db
+*.db-journal
+
+# The sqllogictest corpus. Point the runner at a local checkout instead.
+#
+# WHY: BUILD_PLAN.md Phase 0 — some generated corpus files are 1.2-1.5MB each.
+#      They are upstream data, not this project's source.
+/corpus/
