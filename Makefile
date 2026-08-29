@@ -10,14 +10,13 @@
 test:
 	go test -race ./...
 
-# WHY: gofumpt and golangci-lint are not stdlib. `go tool` reads the tool
-#      directives in go.mod, so the versions are pinned in the repo and every
-#      machine runs the same linter. Adding the tools is Step 1's only
-#      dependency work; the config lands with the first real Go file.
+# WHY: stdlib only. gofumpt and golangci-lint are real dependencies and get
+#      added the day there is Go in the repo for them to have an opinion about
+#      — not before. gofmt ships with the toolchain and covers the formatting
+#      rules that matter until then.
 lint:
-	go tool gofumpt -l -w .
+	gofmt -l -w .
 	go vet ./...
-	go tool golangci-lint run
 
 # strip removes the tagged teaching comments and prints what's left.
 #
