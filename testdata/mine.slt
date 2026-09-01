@@ -1,0 +1,121 @@
+# Hand-written tests for what kite supports in Phases 1-4.
+#
+# Deliberately narrow: literal expressions, CREATE TABLE, INSERT, SELECT *.
+# Nothing here needs WHERE, ORDER BY, aggregates or joins, because kite will
+# not have them for weeks and a file full of failures teaches nothing.
+
+# ---- Phase 2: expressions, no FROM ----
+
+query I nosort
+SELECT 1
+----
+1
+
+query I nosort
+SELECT 1+2*3
+----
+7
+
+# Precedence again, the other way round.
+query I nosort
+SELECT (1+2)*3
+----
+9
+
+# Unary minus vs binary minus, the classic Pratt off-by-one.
+query I nosort
+SELECT -2+3
+----
+1
+
+query I nosort
+SELECT 2- -3
+----
+5
+
+query T nosort
+SELECT 'a' || 'b'
+----
+ab
+
+# A doubled quote is one literal quote, not the end of the string.
+query T nosort
+SELECT 'it''s'
+----
+it's
+
+# Comparison with NULL is NULL, never false. Three-valued logic.
+query I nosort
+SELECT 1 = NULL
+----
+NULL
+
+query I nosort
+SELECT 1 = 1
+----
+1
+
+query R nosort
+SELECT 2.5
+----
+2.500
+
+# ---- Phase 3: CREATE TABLE ----
+
+statement ok
+CREATE TABLE t(a INTEGER, b TEXT)
+
+statement error
+CREATE TABLE t(a INTEGER)
+
+statement error
+SELECT * FROM nosuchtable
+
+# ---- Phase 4: INSERT and SELECT * ----
+
+statement ok
+INSERT INTO t VALUES (1, 'one')
+
+statement ok
+INSERT INTO t VALUES (2, 'two')
+
+statement ok
+INSERT INTO t VALUES (3, 'three')
+
+# Rows come back in insertion order.
+query IT nosort
+SELECT * FROM t
+----
+1
+one
+2
+two
+3
+three
+
+statement error
+INSERT INTO nosuchtable VALUES (1)
+
+# An empty table returns no rows, which is not an error.
+statement ok
+CREATE TABLE empty_table(x INTEGER)
+
+query I nosort
+SELECT * FROM empty_table
+----
+
+# NULL survives a round trip through storage.
+statement ok
+INSERT INTO t VALUES (4, NULL)
+
+query IT nosort
+SELECT * FROM t
+----
+1
+one
+2
+two
+3
+three
+4
+NULL

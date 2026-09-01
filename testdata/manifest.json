@@ -1,0 +1,14 @@
+{
+  "_comment": "Pinned list of files this run covers. Grows one deliberate entry at a time. Removing a file to raise the number defeats the point of pinning it.",
+  "_excluded": {
+    "evidence/slt_lang_aggfunc.test": "6 records after its deliberate integer-overflow section have unspecified expected results; real sqllogictest tolerates them via a mechanism this runner does not implement yet. Add back when it does."
+  },
+  "files": [
+    "mine.slt",
+    "slt_lang_createview.test",
+    "evidence_in1.test",
+    "evidence_slt_lang_dropview.test",
+    "evidence_slt_lang_createtrigger.test",
+    "1_slt_good_0.test"
+  ]
+}

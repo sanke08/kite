@@ -1,0 +1,64 @@
+# Hand-written Kite smoke tests for the SQL features introduced in phases 1-4.
+
+query I nosort
+SELECT 1
+----
+1
+
+query I nosort
+SELECT 1 + 2 * 3
+----
+7
+
+query I nosort
+SELECT -2 + 3
+----
+1
+
+query I nosort
+SELECT 2 - -3
+----
+5
+
+query T nosort
+SELECT 'hello'
+----
+hello
+
+query T nosort
+SELECT 'a' || 'b'
+----
+ab
+
+query I nosort
+SELECT NULL
+----
+NULL
+
+query I nosort
+SELECT 1 = NULL
+----
+NULL
+
+statement ok
+CREATE TABLE users(id INTEGER, name TEXT)
+
+statement ok
+INSERT INTO users VALUES (1, 'Alice')
+
+statement ok
+INSERT INTO users VALUES (2, 'Bob')
+
+statement ok
+INSERT INTO users VALUES (3, 'Charlie')
+
+query IT nosort
+SELECT * FROM users
+----
+1
+Alice
+2
+Bob
+3
+Charlie
+
