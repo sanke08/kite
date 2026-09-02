@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/sanke08/kite/internal/sql/scanner"
 )
 
 func main() {
@@ -52,18 +54,63 @@ func run(input io.Reader, output io.Writer) error {
 	}
 }
 
-// handle acts on one line of input.
+// handle acts on one line of input: either a dot-command or SQL.
 //
-// WHY: dot-commands are checked before anything else because they are not SQL
-// and never reach the parser. SQLite works the same way, and the corpus files
-// assume it.
+// EG: the two paths
+//
+//	.tables       a dot-command  -> "not implemented yet"
+//	SELECT 1      SQL            -> scanned into tokens
+//
+// WHY dot-commands are checked first: .tables is not SQL and would be a
+// syntax error if it reached the scanner. They are shell commands that
+// happen to share the prompt — SQLite does the same, and the test corpus
+// assumes it.
 func handle(output io.Writer, line string) {
 	if strings.HasPrefix(line, ".") {
 		fmt.Fprintf(output, "%s: not implemented yet\n", strings.Fields(line)[0])
 		return
 	}
 
-	// TEMPORARY: echoes the input. Becomes the tokenizer, then the parser,
-	// then a real query.
-	fmt.Fprintf(output, "%s\n", line)
+	// TEMPORARY: prints the tokens the line breaks into. Becomes a parse and
+	// then a real query, so this loop is scaffolding for seeing the scanner
+	// work — not something a database does.
+	//
+	// A token is one indivisible piece of the query: a keyword, a name, a
+	// number, a piece of punctuation.
+	//
+	// EG: typing SELECT a<=5 at the prompt prints
+	//
+	//	KEYWORD("SELECT") IDENT("a") <=("<=") INTEGER("5")
+	//
+	// Four tokens. Note <= came back as one, not < followed by =, and that
+	// "5" is still text — turning it into a number needs a column type the
+	// scanner cannot know about.
+	tokens := scanner.New(line)
+
+	// The scanner hands over one token per call rather than a whole list, so
+	// this pulls until it reports EOF.
+	for {
+		token, err := tokens.Next()
+
+		// An error means the text is not scannable at all — an unterminated
+		// quote, a stray character. It already names the line and column, so
+		// printing it is enough, and there is nothing to recover to.
+		if err != nil {
+			fmt.Fprintf(output, "error: %v\n", err)
+			return
+		}
+
+		// EOF means the line is used up. It is a token like any other rather
+		// than a separate signal, which is why the check is on Type.
+		if token.Type == scanner.EOF {
+			break
+		}
+
+		// Token has a String method, so %s prints it as KEYWORD("SELECT").
+		fmt.Fprintf(output, "%s ", token)
+	}
+
+	// One newline after the whole line's tokens, since each was printed with
+	// a trailing space and no break of its own.
+	fmt.Fprintln(output)
 }
