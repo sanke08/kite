@@ -119,3 +119,85 @@ two
 three
 4
 NULL
+
+# Three-valued logic. NULL means unknown, so it does not collapse to false.
+
+query I nosort
+SELECT NOT (1 = NULL)
+----
+NULL
+
+query I nosort
+SELECT 0 AND NULL
+----
+0
+
+query I nosort
+SELECT 1 AND NULL
+----
+NULL
+
+query I nosort
+SELECT 1 OR NULL
+----
+1
+
+query I nosort
+SELECT NULL IS NULL
+----
+1
+
+query I nosort
+SELECT 1 IS NOT NULL
+----
+1
+
+# Left-associativity. 10-3-2 is (10-3)-2, not 10-(3-2).
+
+query I nosort
+SELECT 10-3-2
+----
+5
+
+# Integer division truncates; one real operand makes the whole thing real.
+
+query I nosort
+SELECT 7/2
+----
+3
+
+query R nosort
+SELECT 7/2.0
+----
+3.500
+
+# Division by zero is NULL in SQL, not an error.
+
+query I nosort
+SELECT 1/0
+----
+NULL
+
+# Text coerces to a number by reading as far as it can.
+
+query I nosort
+SELECT '12abc'+1
+----
+13
+
+query I nosort
+SELECT 'abc'+1
+----
+1
+
+# NULL propagates through arithmetic and concatenation.
+
+query I nosort
+SELECT NULL+1
+----
+NULL
+
+query T nosort
+SELECT NULL || 'x'
+----
+NULL

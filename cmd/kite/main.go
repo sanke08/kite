@@ -9,7 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sanke08/kite/internal/sql/scanner"
+	"github.com/sanke08/kite/internal/sql/eval"
+	"github.com/sanke08/kite/internal/sql/parser"
+	"github.com/sanke08/kite/internal/sql/value"
 )
 
 func main() {
@@ -71,46 +73,54 @@ func handle(output io.Writer, line string) {
 		return
 	}
 
-	// TEMPORARY: prints the tokens the line breaks into. Becomes a parse and
-	// then a real query, so this loop is scaffolding for seeing the scanner
-	// work — not something a database does.
+	// TEMPORARY: only SELECT with no FROM works, so the whole statement is
+	// "SELECT" followed by one expression. A real statement parser replaces
+	// this once there are tables to select from.
 	//
-	// A token is one indivisible piece of the query: a keyword, a name, a
-	// number, a piece of punctuation.
-	//
-	// EG: typing SELECT a<=5 at the prompt prints
-	//
-	//	KEYWORD("SELECT") IDENT("a") <=("<=") INTEGER("5")
-	//
-	// Four tokens. Note <= came back as one, not < followed by =, and that
-	// "5" is still text — turning it into a number needs a column type the
-	// scanner cannot know about.
-	tokens := scanner.New(line)
-
-	// The scanner hands over one token per call rather than a whole list, so
-	// this pulls until it reports EOF.
-	for {
-		token, err := tokens.Next()
-
-		// An error means the text is not scannable at all — an unterminated
-		// quote, a stray character. It already names the line and column, so
-		// printing it is enough, and there is nothing to recover to.
-		if err != nil {
-			fmt.Fprintf(output, "error: %v\n", err)
-			return
-		}
-
-		// EOF means the line is used up. It is a token like any other rather
-		// than a separate signal, which is why the check is on Type.
-		if token.Type == scanner.EOF {
-			break
-		}
-
-		// Token has a String method, so %s prints it as KEYWORD("SELECT").
-		fmt.Fprintf(output, "%s ", token)
+	// EG: SELECT 1+2*3   ->  7
+	//	SELECT 1 = NULL ->  NULL
+	rest, isSelect := selectExpression(line)
+	if !isSelect {
+		fmt.Fprintf(output, "error: only SELECT is supported so far\n")
+		return
 	}
 
-	// One newline after the whole line's tokens, since each was printed with
-	// a trailing space and no break of its own.
-	fmt.Fprintln(output)
+	expression, err := parseAndEvaluate(rest)
+	if err != nil {
+		fmt.Fprintf(output, "error: %v\n", err)
+		return
+	}
+	fmt.Fprintln(output, expression)
+}
+
+// selectExpression strips a leading SELECT and returns what follows.
+//
+// EG: "SELECT 1+2"  -> "1+2", true
+//
+//	"select  1"   -> "1",   true    keyword is case-insensitive
+//	"INSERT ..."  -> "",    false
+func selectExpression(line string) (string, bool) {
+	words := strings.Fields(line)
+	if len(words) == 0 || !strings.EqualFold(words[0], "SELECT") {
+		return "", false
+	}
+	return strings.TrimSpace(line[len(words[0]):]), true
+}
+
+// parseAndEvaluate runs one expression through the parser and the evaluator.
+//
+// WHY they are separate steps rather than one pass: the parse decides SHAPE
+// (what binds to what) and the evaluation decides VALUE. Keeping them apart is
+// what lets the same tree later be checked against a catalog, printed by
+// EXPLAIN, or evaluated once per row without re-parsing.
+func parseAndEvaluate(text string) (value.Value, error) {
+	expressionParser, err := parser.New(text)
+	if err != nil {
+		return value.Null(), err
+	}
+	tree, err := expressionParser.ParseExpr()
+	if err != nil {
+		return value.Null(), err
+	}
+	return eval.Expr(tree)
 }

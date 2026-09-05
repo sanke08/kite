@@ -1,0 +1,99 @@
+Draw a hand-drawn whiteboard-style architecture diagram, in the visual style of
+Excalidraw or eraser.io.
+
+STYLE — follow exactly:
+- Background: solid very dark charcoal, near-black (#121212 to #1a1a1a).
+  Completely flat. No gradient, no vignette, no texture, no grid, no dot grid.
+- Every stroke, box outline, arrow and letter: chalk white / off-white
+  (#f0f0f0). Hand-drawn look — slightly wobbly lines, imperfect rectangle
+  corners, as if sketched with a marker on a blackboard.
+- Stroke weight: thin to medium, consistent everywhere. No thick borders.
+- Boxes: rectangles with slightly rounded, imperfect corners. Transparent
+  fill — the dark background shows through. NO filled boxes, NO shadows,
+  NO 3D, NO glow, NO neon.
+- Text: hand-lettered look, all lowercase for package names exactly as
+  written below, clearly legible, monospace-ish. Do not restyle or
+  capitalise any name.
+- Arrows: straight or gently curved lines with a simple open arrowhead
+  (a plain V, not a filled triangle).
+- Colour: STRICTLY two colours only — dark background, white strokes. No
+  accent colour anywhere. No red, blue, green, yellow, orange, purple.
+- Layout: clean, generous whitespace, well balanced, nothing overlapping,
+  no text touching or crossing any line. Every label fully inside the
+  image bounds.
+- Aspect ratio: landscape, roughly 16:10.
+- No title bar, no watermark, no logo, no legend key, no decorative
+  flourishes, no icons, no emoji.
+
+CONTENT — draw exactly this, nothing more and nothing less.
+
+The subject is a small SQL database engine written in Go, at the very START of
+the project. Each big box is a Go PACKAGE, with its .go files listed inside.
+An arrow means "this package imports that package".
+
+BOX SHAPE — important:
+Each package box is a rectangle with the package name at the TOP in slightly
+larger hand-lettering, then a thin horizontal dividing line, then its .go file
+names listed underneath in smaller hand-lettering, one per line, left-aligned.
+Like a hand-drawn UML class box.
+
+  +---------------------------+
+  |        scanner            |   <- package name, larger
+  |---------------------------|   <- thin divider line
+  |  token.go    Token, Type  |   <- file name, then what it holds
+  |  scanner.go  Next()       |
+  +---------------------------+
+
+At this point there is NO database yet — only the test scoreboard, the two seam
+interfaces, and a REPL that echoes its input. Nothing imports anything else.
+That disconnection is the point of the drawing: FOUR SEPARATE ISLANDS, not one
+tree. Do not invent arrows to make it look connected.
+
+=== ISLAND 1 (top left) — two boxes, one arrow ===
+
+  package: cmd/slt
+  files:
+     main.go      wires the runner to an engine
+  note to the right: "the scoreboard"
+
+  package: internal/slt
+  files:
+     parse.go     reads .slt files into records
+     run.go       runs records, compares results
+     report.go    prints the pass rate
+     value.go     renders a value the corpus way
+     sqlite.go    drives the real sqlite3 binary
+  note to the right: "reads .slt files, reports the number"
+
+  ARROW: cmd/slt -> internal/slt
+
+=== ISLAND 2 (top right) — one box, NO arrows ===
+
+  package: cmd/kite
+  files:
+     main.go      reads a line, echoes it back
+  note to the right: "the REPL — echoes the line, nothing more"
+
+=== ISLAND 3 (bottom left) — one box, NO arrows ===
+
+  package: fs
+  files:
+     fs.go        the File interface: ReadAt, WriteAt, Sync
+     os.go        the real-disk implementation
+  note underneath: "seam 1 — the disk boundary"
+
+=== ISLAND 4 (bottom right) — one box, NO arrows ===
+
+  storage.go      (a single file at the repo root, not a package — draw it as
+                   one box with just this name and the note below)
+  note inside or underneath: "seam 2 — Table, Cursor. Interfaces only."
+
+=== TOTAL ===
+
+Five boxes. Exactly ONE arrow in the whole image (cmd/slt -> internal/slt).
+Four visually separate islands with clear empty space between them.
+
+Handwritten note at the bottom of the image, small:
+  "phase 0 — seams and scoreboard only. nothing imports anything yet."
+
+If your drawing has more than one arrow, it is wrong.

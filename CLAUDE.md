@@ -141,3 +141,57 @@ placeholder structs, no wrapper that only forwards.
 If a function already returns the interface type, the compiler checks
 satisfaction there and an assertion adds nothing.
 
+## The dependency tree
+
+Every phase that changes the package graph gets
+**`docs/trees/phase-NN/prompt.txt`** — a Gemini prompt that draws the graph as
+a hand-drawn whiteboard diagram, dark background, white strokes, Excalidraw
+style. Written in the same message as the code. He pastes it into Gemini and
+saves the result as `tree.png` beside it. One folder per phase; nothing is
+overwritten, so the images are a history of how the engine grew.
+
+The prompt is the checked-in, diffable record of the graph — an image is not.
+Keep `docs/trees/README.md`'s package descriptions current alongside it.
+
+### Writing the prompt
+
+Start with the shared style block from `docs/trees/STYLE.txt`, copied byte for
+byte so the images look like one series. Then the content half, and the content
+half must be exhaustive — a vague prompt gets a generic diagram back:
+
+- Every box is a PACKAGE drawn UML-style: package name at the top, a divider
+  line, then its `.go` files listed inside, one per line, each with three or
+  four words saying what it holds (`logic.go   Truth - TRUE/FALSE/UNKNOWN`).
+  The file names are the point of the diagram — he is reading it to find out
+  which file holds what.
+- List the files from disk, never from memory:
+
+	ls */*.go internal/*/*.go internal/sql/*/*.go *.go
+
+  and check every non-test file appears somewhere in the prompt.
+- Name every box and say which row and side it sits on.
+- List every arrow as one `FROM -> TO` line. Never "connect these logically".
+- State the arrow count in and out of each box, as a checklist the image can
+  be verified against.
+- Name any box several arrows converge on and say **draw it ONE TIME ONLY** —
+  Gemini's default is to duplicate a shared node.
+- State the total number of arrows in the image as the last line.
+- Say explicitly when a package is deliberately unconnected, and that the
+  missing arrows are the information.
+
+`docs/trees/README.md` has a table of the ways Gemini gets it wrong and which
+line to repeat to fix each one.
+
+### Deriving it
+
+Never from memory. Run:
+
+	go list -f '{{.ImportPath}} -> {{join .Imports " "}}' ./... | grep sanke08
+
+and check every arrow in the prompt against that output before writing it. An
+arrow exists only if the import exists. A package importing nothing of ours is
+a leaf. A package nothing imports goes in the dashed "built, not wired in yet"
+group, not into a tree it has not earned.
+
+Do not draw the tree as ASCII art in markdown — hand-aligned boxes do not
+survive the next edit, and the branching does not read.

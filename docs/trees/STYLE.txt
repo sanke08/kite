@@ -1,0 +1,46 @@
+SHARED STYLE BLOCK
+==================
+Paste this at the top of every phase prompt. Keep it byte-identical across
+phases so the images look like one series rather than a pile of one-offs.
+
+---8<--- copy from here ---8<---
+
+Draw a hand-drawn whiteboard-style architecture diagram, in the visual style of
+Excalidraw or eraser.io.
+
+STYLE — follow exactly:
+- Background: solid very dark charcoal, near-black (#121212 to #1a1a1a).
+  Completely flat. No gradient, no vignette, no texture, no grid, no dot grid.
+- Every stroke, box outline, arrow and letter: chalk white / off-white
+  (#f0f0f0). Hand-drawn look — slightly wobbly lines, imperfect rectangle
+  corners, as if sketched with a marker on a blackboard.
+- Stroke weight: thin to medium, consistent everywhere. No thick borders.
+- Boxes: rectangles with slightly rounded, imperfect corners. Transparent
+  fill — the dark background shows through. NO filled boxes, NO shadows,
+  NO 3D, NO glow, NO neon.
+- Text: hand-lettered look, all lowercase for package names exactly as
+  written below, clearly legible, monospace-ish. Do not restyle or
+  capitalise any name.
+- Arrows: straight or gently curved lines with a simple open arrowhead
+  (a plain V, not a filled triangle).
+- Colour: STRICTLY two colours only — dark background, white strokes. No
+  accent colour anywhere. No red, blue, green, yellow, orange, purple.
+- Layout: clean, generous whitespace, well balanced, nothing overlapping,
+  no text touching or crossing any line. Every label fully inside the
+  image bounds.
+- Aspect ratio: landscape, roughly 16:10.
+- No title bar, no watermark, no logo, no legend key, no decorative
+  flourishes, no icons, no emoji.
+
+---8<--- to here ---8<---
+
+RULES FOR WRITING THE CONTENT HALF
+- List every box by its exact name, and say where it sits.
+- List every arrow as "FROM -> TO", one per line. Never say "connect them
+  logically" — name each edge.
+- State explicitly how many arrows leave each box and how many arrive.
+- Name any box that several arrows converge on, and say it must be drawn
+  ONCE, not duplicated.
+- Derive the edges from:
+      go list -f '{{.ImportPath}} -> {{join .Imports " "}}' ./... | grep sanke08
+  Never from memory.

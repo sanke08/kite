@@ -1,0 +1,198 @@
+Draw a hand-drawn whiteboard-style architecture diagram, in the visual style of
+Excalidraw or eraser.io.
+
+STYLE — follow exactly:
+- Background: solid very dark charcoal, near-black (#121212 to #1a1a1a).
+  Completely flat. No gradient, no vignette, no texture, no grid, no dot grid.
+- Every stroke, box outline, arrow and letter: chalk white / off-white
+  (#f0f0f0). Hand-drawn look — slightly wobbly lines, imperfect rectangle
+  corners, as if sketched with a marker on a blackboard.
+- Stroke weight: thin to medium, consistent everywhere. No thick borders.
+- Boxes: rectangles with slightly rounded, imperfect corners. Transparent
+  fill — the dark background shows through. NO filled boxes, NO shadows,
+  NO 3D, NO glow, NO neon.
+- Text: hand-lettered look, all lowercase for package names exactly as
+  written below, clearly legible, monospace-ish. Do not restyle or
+  capitalise any name.
+- Arrows: straight or gently curved lines with a simple open arrowhead
+  (a plain V, not a filled triangle).
+- Colour: STRICTLY two colours only — dark background, white strokes. No
+  accent colour anywhere. No red, blue, green, yellow, orange, purple.
+- Layout: clean, generous whitespace, well balanced, nothing overlapping,
+  no text touching or crossing any line. Every label fully inside the
+  image bounds.
+- Aspect ratio: landscape, roughly 16:10.
+- No title bar, no watermark, no logo, no legend key, no decorative
+  flourishes, no icons, no emoji.
+
+CONTENT — draw exactly this. Every arrow listed must appear. No arrow that is
+not listed may appear.
+
+The subject is a small SQL database engine written in Go. Each big box is a Go
+PACKAGE. Inside each package box, list its .go FILES as small stacked labels,
+so a reader can see which file holds what. An arrow between package boxes means
+"this package imports that package".
+
+BOX SHAPE — important:
+Each package box is a rectangle with the package name written at the TOP in
+slightly larger hand-lettering, then a thin horizontal dividing line beneath
+it, then its file names listed underneath in smaller hand-lettering, one per
+line, left-aligned. Like a hand-drawn UML class box.
+
+  +---------------------------+
+  |        value              |   <- package name, larger
+  |---------------------------|   <- thin divider line
+  |  value.go   Value, Kind   |   <- file name, then what it holds
+  |  logic.go   Truth, 3VL    |
+  |  compare.go Compare, Equal|
+  +---------------------------+
+
+All arrows point DOWNWARD. No arrow ever travels upward.
+
+=== TREE 1 (left two thirds of the image) — 5 ROWS ===
+
+ROW 1, centred:
+
+  package: cmd/kite
+  files:
+     main.go     the REPL loop, reads a line
+
+ROW 2, two boxes side by side:
+
+  LEFT box, package: eval
+  files:
+     eval.go     Expr(), walks the tree and computes
+
+  RIGHT box, package: parser
+  files:
+     parser.go   Pratt precedence, ParseExpr()
+
+ROW 3, two boxes side by side:
+
+  LEFT box, package: ast
+  files:
+     expr.go     Literal, Binary, Unary, IsNull
+
+  RIGHT box, package: scanner
+  files:
+     token.go    Token, Type
+     scanner.go  Next(), scanString, scanWord
+     keyword.go  the SELECT/FROM/AND table
+
+ROW 4, ONE box, centred and wide:
+
+  package: value
+  files:
+     value.go    Value, Kind, Null/Integer/Text
+     logic.go    Truth — TRUE/FALSE/UNKNOWN
+     compare.go  Compare, Equal, Less
+  note to the right of this box: "leaf — 4 arrows arrive here"
+
+ROW 5, ONE box, centred and wide:
+
+  package: go standard library
+  no file list inside this one — it is not our code
+
+CRITICAL LAYOUT RULE: the value box goes in ROW 4, near the BOTTOM. Four
+separate arrows must reach it from above, so it needs clear empty space above
+it. Do NOT place value in row 2 or at the top.
+
+=== ARROWS IN TREE 1 — exactly 11, all pointing downward ===
+
+From cmd/kite (3 arrows leave this box):
+  1.  cmd/kite -> eval
+  2.  cmd/kite -> parser
+  3.  cmd/kite -> value      (a long arrow down the far LEFT of the image,
+                              passing OUTSIDE the row 2 and row 3 boxes)
+
+From parser (3 arrows leave this box):
+  4.  parser -> ast
+  5.  parser -> scanner
+  6.  parser -> value        (down the RIGHT side, outside the boxes)
+
+From eval (2 arrows leave this box):
+  7.  eval -> ast
+  8.  eval -> value          (down the left, outside the boxes)
+
+From ast (1 arrow leaves this box):
+  9.  ast -> value           (short, straight down)
+
+From scanner (1 arrow leaves this box):
+  10. scanner -> go standard library
+
+From value (1 arrow leaves this box):
+  11. value -> go standard library
+
+=== FORBIDDEN ARROWS — do not draw any of these ===
+
+  eval   -> go standard library     WRONG
+  ast    -> go standard library     WRONG
+  parser -> go standard library     WRONG
+  cmd/kite -> ast                   WRONG
+  cmd/kite -> scanner               WRONG
+
+Only the 11 numbered arrows exist in tree 1.
+
+=== VERIFY YOUR DRAWING against these counts ===
+
+  cmd/kite             3 arrows out,  0 arrows in
+  eval                 2 arrows out,  1 arrow  in
+  parser               3 arrows out,  1 arrow  in
+  ast                  1 arrow  out,  2 arrows in
+  scanner              1 arrow  out,  1 arrow  in
+  value                1 arrow  out,  4 arrows in   <-- count these carefully
+  go standard library  0 arrows out,  2 arrows in
+
+If the value box does not have FOUR arrowheads touching its top edge, the
+drawing is wrong. Redraw it.
+
+=== TREE 2 (right third, clearly separated from tree 1) ===
+
+Three boxes stacked vertically, exactly 2 arrows.
+
+  package: cmd/slt
+  files:
+     main.go     wires the runner to an engine
+  note: "the test runner"
+
+  package: internal/slt
+  files:
+     parse.go    reads .slt files into records
+     run.go      runs records, compares results
+     report.go   prints the pass rate
+     value.go    renders a value the corpus way
+     sqlite.go   drives the real sqlite3 binary
+  note: "leaf on purpose — must not depend on the engine it judges"
+
+  package: go standard library
+  (a SECOND, separate box — do NOT connect it to tree 1's bottom box)
+
+  cmd/slt      -> internal/slt
+  internal/slt -> go standard library
+
+=== DETACHED GROUP (bottom right, below tree 2) ===
+
+A rectangle with a DASHED outline containing two boxes side by side:
+
+  package: fs
+  files:
+     fs.go       the File interface
+     os.go       the real-disk implementation
+
+  package: storage.go     (a single file, not a package — draw it as one box
+                           with no file list, just the name)
+     note inside: "Table, Cursor — interfaces, no implementation yet"
+
+ZERO arrows touch this dashed group. It is deliberately unconnected — the
+absence of arrows is the information being shown.
+Handwritten label above the dashed rectangle: "built, not wired in yet"
+
+=== TOTAL ARROWS IN THE WHOLE IMAGE: 13 ===
+  11 in tree 1, 2 in tree 2, 0 in the dashed group.
+Count the arrowheads in your finished drawing. If the total is not 13, it is
+wrong.
+
+=== READABILITY ===
+The file names inside the boxes are the point of this diagram, so make the
+boxes large enough that every file name is comfortably legible. Prefer a
+larger image over cramped text. Nothing may overlap.
