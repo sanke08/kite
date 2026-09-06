@@ -1,0 +1,223 @@
+Draw a hand-drawn whiteboard-style architecture diagram, in the visual style of
+Excalidraw or eraser.io.
+
+STYLE — follow exactly:
+- Background: solid very dark charcoal, near-black (#121212 to #1a1a1a).
+  Completely flat. No gradient, no vignette, no texture, no grid, no dot grid.
+- Every stroke, box outline, arrow and letter: chalk white / off-white
+  (#f0f0f0). Hand-drawn look — slightly wobbly lines, imperfect rectangle
+  corners, as if sketched with a marker on a blackboard.
+- Stroke weight: thin to medium, consistent everywhere. No thick borders.
+- Boxes: rectangles with slightly rounded, imperfect corners. Transparent
+  fill — the dark background shows through. NO filled boxes, NO shadows,
+  NO 3D, NO glow, NO neon.
+- Text: hand-lettered look, all lowercase for package names exactly as
+  written below, clearly legible, monospace-ish. Do not restyle or
+  capitalise any name.
+- Arrows: straight or gently curved lines with a simple open arrowhead
+  (a plain V, not a filled triangle).
+- Colour: STRICTLY two colours only — dark background, white strokes. No
+  accent colour anywhere. No red, blue, green, yellow, orange, purple.
+- Layout: clean, generous whitespace, well balanced, nothing overlapping,
+  no text touching or crossing any line. Every label fully inside the
+  image bounds.
+- Aspect ratio: landscape, roughly 16:10.
+- No title bar, no watermark, no logo, no legend key, no decorative
+  flourishes, no icons, no emoji.
+
+CONTENT — draw exactly this. Every arrow listed must appear. No arrow that is
+not listed may appear.
+
+The subject is a small SQL database engine written in Go. Each big box is a Go
+PACKAGE, with its .go files listed inside. An arrow means "this package imports
+that package".
+
+BOX SHAPE — important:
+Each package box is a rectangle with the package name at the TOP in slightly
+larger hand-lettering, then a thin horizontal dividing line, then its .go file
+names listed underneath in smaller hand-lettering, one per line, left-aligned.
+Like a hand-drawn UML class box.
+
+  +--------------------------------+
+  |            value               |   <- package name, larger
+  |--------------------------------|   <- thin divider line
+  |  value.go    Value, Kind       |   <- file name, then what it holds
+  |  logic.go    Truth, 3-valued   |
+  |  compare.go  Compare, Equal    |
+  +--------------------------------+
+
+All arrows point DOWNWARD. No arrow ever travels upward.
+
+=== TREE 1 (left two thirds of the image) — 6 ROWS ===
+
+ROW 1, centred at the top:
+
+  package: cmd/kite
+  files:
+     main.go     the REPL loop and dot-commands
+  note to the right, outside the box: "the REPL"
+
+ROW 2, ONE box, centred:
+
+  package: kite          <- the root package, the database itself
+  files:
+     session.go   DB, Open, Exec
+     memtable.go  MemTable, memCursor
+     storage.go   Table, Cursor interfaces
+  note to the right: "the database"
+
+ROW 3, three boxes side by side:
+
+  LEFT box, package: eval
+  files:
+     eval.go      Expr(), walks the tree and computes
+
+  MIDDLE box, package: parser
+  files:
+     parser.go    Pratt precedence, ParseExpr
+     stmt.go      ParseStmt, CREATE TABLE, DROP, SELECT
+
+  RIGHT box, package: catalog
+  files:
+     catalog.go   Catalog, Table, Column
+     affinity.go  the INT/CHAR/BLOB/REAL rules
+
+ROW 4, two boxes side by side:
+
+  LEFT box, package: ast
+  files:
+     expr.go      Literal, Binary, Unary, IsNull
+     stmt.go      CreateTable, DropTable, Select
+
+  RIGHT box, package: scanner
+  files:
+     token.go     Token, Type
+     scanner.go   Next, scanString, scanWord
+     keyword.go   the SELECT/FROM/CREATE table
+
+ROW 5, ONE box, centred and wide:
+
+  package: value
+  files:
+     value.go     Value, Kind, Null/Integer/Text
+     logic.go     Truth, TRUE/FALSE/UNKNOWN
+     compare.go   Compare, Equal, Less
+  note to the right: "leaf — 4 arrows arrive here"
+
+ROW 6, ONE box, centred and wide:
+
+  package: go standard library
+  no file list inside this one — it is not our code
+
+CRITICAL LAYOUT RULE: the value box goes in ROW 5, near the BOTTOM. Four
+separate arrows must reach it from above, so it needs clear empty space above
+it. Do NOT place value in row 2 or 3.
+
+=== ARROWS IN TREE 1 — exactly 14, all pointing downward ===
+
+From cmd/kite (1 arrow leaves this box):
+  1.  cmd/kite -> kite
+
+From kite (5 arrows leave this box):
+  2.  kite -> eval
+  3.  kite -> parser
+  4.  kite -> catalog
+  5.  kite -> ast          (down past row 3, outside those boxes)
+  6.  kite -> value        (a long arrow down the far LEFT of the image,
+                            passing OUTSIDE the row 3 and row 4 boxes)
+
+From parser (3 arrows leave this box):
+  7.  parser -> ast
+  8.  parser -> scanner
+  9.  parser -> value      (down the RIGHT side, outside the boxes)
+
+From eval (2 arrows leave this box):
+  10. eval -> ast
+  11. eval -> value        (down the left, outside the boxes)
+
+From ast (1 arrow leaves this box):
+  12. ast -> value         (short, straight down)
+
+From scanner (1 arrow leaves this box):
+  13. scanner -> go standard library
+
+From value (1 arrow leaves this box):
+  14. value -> go standard library
+
+=== FORBIDDEN ARROWS — do not draw any of these ===
+
+  cmd/kite -> eval                  WRONG. It goes through kite now.
+  cmd/kite -> parser                WRONG.
+  cmd/kite -> value                 WRONG.
+  catalog  -> value                 WRONG. catalog imports nothing of ours.
+  catalog  -> ast                   WRONG.
+  eval     -> go standard library   WRONG.
+  ast      -> go standard library   WRONG.
+  parser   -> go standard library   WRONG.
+
+Only the 14 numbered arrows exist in tree 1.
+
+=== VERIFY YOUR DRAWING against these counts ===
+
+  cmd/kite             1 arrow  out,  0 arrows in
+  kite                 5 arrows out,  1 arrow  in
+  eval                 2 arrows out,  1 arrow  in
+  parser               3 arrows out,  1 arrow  in
+  catalog              0 arrows out,  1 arrow  in   <-- a LEAF, nothing leaves
+  ast                  1 arrow  out,  3 arrows in
+  scanner              1 arrow  out,  1 arrow  in
+  value                1 arrow  out,  4 arrows in   <-- count these carefully
+  go standard library  0 arrows out,  2 arrows in
+
+If the value box does not have FOUR arrowheads touching its top edge, the
+drawing is wrong. Redraw it.
+If the ast box does not have THREE arrowheads touching its top edge, the
+drawing is wrong.
+If the catalog box has ANY arrow leaving it, the drawing is wrong.
+
+=== TREE 2 (right third, clearly separated from tree 1) ===
+
+Three boxes stacked vertically, exactly 2 arrows.
+
+  package: cmd/slt
+  files:
+     main.go      wires the runner to an engine
+  note: "the test runner"
+
+  package: internal/slt
+  files:
+     parse.go     reads .slt files into records
+     run.go       runs records, compares results
+     report.go    prints the pass rate
+     value.go     renders a value the corpus way
+     sqlite.go    drives the real sqlite3 binary
+  note: "leaf on purpose — must not depend on the engine it judges"
+
+  package: go standard library
+  (a SECOND, separate box — do NOT connect it to tree 1's bottom box)
+
+  cmd/slt      -> internal/slt
+  internal/slt -> go standard library
+
+=== DETACHED GROUP (bottom right, below tree 2) ===
+
+A rectangle with a DASHED outline containing ONE box:
+
+  package: fs
+  files:
+     fs.go        the File interface
+     os.go        the real-disk implementation
+
+ZERO arrows touch this dashed group. It is deliberately unconnected — the
+absence of arrows is the information being shown.
+Handwritten label above the dashed rectangle: "built, not wired in yet"
+
+=== TOTAL ARROWS IN THE WHOLE IMAGE: 16 ===
+  14 in tree 1, 2 in tree 2, 0 in the dashed group.
+Count the arrowheads in your finished drawing. If the total is not 16, it is
+wrong.
+
+=== READABILITY ===
+The file names inside the boxes are the point of this diagram, so make the
+boxes large enough that every file name is comfortably legible. Prefer a
+larger image over cramped text. Nothing may overlap.

@@ -9,9 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sanke08/kite/internal/sql/eval"
-	"github.com/sanke08/kite/internal/sql/parser"
-	"github.com/sanke08/kite/internal/sql/value"
+	"github.com/sanke08/kite"
 )
 
 func main() {
@@ -27,6 +25,7 @@ func main() {
 // a test can drive the whole loop with a string and read back what it printed.
 func run(input io.Reader, output io.Writer) error {
 	reader := bufio.NewReader(input)
+	database := kite.Open()
 
 	for {
 		fmt.Fprint(output, "kite> ")
@@ -38,7 +37,7 @@ func run(input io.Reader, output io.Writer) error {
 		// error first would silently discard that line.
 		line = strings.TrimSpace(line)
 		if line != "" && line != ".quit" {
-			handle(output, line)
+			handle(output, database, line)
 		}
 
 		if errors.Is(err, io.EOF) {
@@ -60,67 +59,69 @@ func run(input io.Reader, output io.Writer) error {
 //
 // EG: the two paths
 //
-//	.tables       a dot-command  -> "not implemented yet"
-//	SELECT 1      SQL            -> scanned into tokens
+//	.tables       a dot-command  -> lists table names
+//	SELECT 1      SQL            -> parsed, executed, printed
 //
 // WHY dot-commands are checked first: .tables is not SQL and would be a
-// syntax error if it reached the scanner. They are shell commands that
-// happen to share the prompt — SQLite does the same, and the test corpus
-// assumes it.
-func handle(output io.Writer, line string) {
+// syntax error if it reached the parser. They are shell commands that happen
+// to share the prompt — SQLite does the same, and the test corpus assumes it.
+func handle(output io.Writer, database *kite.DB, line string) {
 	if strings.HasPrefix(line, ".") {
-		fmt.Fprintf(output, "%s: not implemented yet\n", strings.Fields(line)[0])
+		dotCommand(output, database, line)
 		return
 	}
 
-	// TEMPORARY: only SELECT with no FROM works, so the whole statement is
-	// "SELECT" followed by one expression. A real statement parser replaces
-	// this once there are tables to select from.
-	//
-	// EG: SELECT 1+2*3   ->  7
-	//	SELECT 1 = NULL ->  NULL
-	rest, isSelect := selectExpression(line)
-	if !isSelect {
-		fmt.Fprintf(output, "error: only SELECT is supported so far\n")
-		return
-	}
-
-	expression, err := parseAndEvaluate(rest)
+	result, err := database.Exec(line)
 	if err != nil {
 		fmt.Fprintf(output, "error: %v\n", err)
 		return
 	}
-	fmt.Fprintln(output, expression)
+	printResult(output, result)
 }
 
-// selectExpression strips a leading SELECT and returns what follows.
+// printResult writes a result set, one row per line, values separated by |.
 //
-// EG: "SELECT 1+2"  -> "1+2", true
-//
-//	"select  1"   -> "1",   true    keyword is case-insensitive
-//	"INSERT ..."  -> "",    false
-func selectExpression(line string) (string, bool) {
+// WHY the pipe separator: it is what sqlite3 uses in its default mode, so
+// output from the two can be compared by eye without reformatting either.
+// A statement with no result set — CREATE TABLE — prints nothing at all.
+func printResult(output io.Writer, result *kite.Result) {
+	for _, row := range result.Rows {
+		rendered := make([]string, len(row))
+		for index, cell := range row {
+			rendered[index] = kite.Render(cell)
+		}
+		fmt.Fprintln(output, strings.Join(rendered, "|"))
+	}
+}
+
+// dotCommand handles the non-SQL commands that share the prompt.
+func dotCommand(output io.Writer, database *kite.DB, line string) {
 	words := strings.Fields(line)
-	if len(words) == 0 || !strings.EqualFold(words[0], "SELECT") {
-		return "", false
-	}
-	return strings.TrimSpace(line[len(words[0]):]), true
-}
 
-// parseAndEvaluate runs one expression through the parser and the evaluator.
-//
-// WHY they are separate steps rather than one pass: the parse decides SHAPE
-// (what binds to what) and the evaluation decides VALUE. Keeping them apart is
-// what lets the same tree later be checked against a catalog, printed by
-// EXPLAIN, or evaluated once per row without re-parsing.
-func parseAndEvaluate(text string) (value.Value, error) {
-	expressionParser, err := parser.New(text)
-	if err != nil {
-		return value.Null(), err
+	switch words[0] {
+	case ".tables":
+		names := database.Tables()
+		if len(names) == 0 {
+			return
+		}
+		fmt.Fprintln(output, strings.Join(names, " "))
+
+	case ".schema":
+		// With no argument, print every table. With one, print that table.
+		names := database.Tables()
+		if len(words) > 1 {
+			names = words[1:]
+		}
+		for _, name := range names {
+			schema, ok := database.Schema(name)
+			if !ok {
+				fmt.Fprintf(output, "error: no such table: %s\n", name)
+				continue
+			}
+			fmt.Fprintln(output, schema)
+		}
+
+	default:
+		fmt.Fprintf(output, "%s: not implemented yet\n", words[0])
 	}
-	tree, err := expressionParser.ParseExpr()
-	if err != nil {
-		return value.Null(), err
-	}
-	return eval.Expr(tree)
 }

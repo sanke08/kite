@@ -201,3 +201,31 @@ query T nosort
 SELECT NULL || 'x'
 ----
 NULL
+
+# ---- Phase 3: CREATE TABLE and the catalog ----
+
+statement ok
+CREATE TABLE phase3(a INTEGER, b VARCHAR(255), c)
+
+statement error
+CREATE TABLE phase3(a INTEGER)
+
+statement ok
+DROP TABLE phase3
+
+statement error
+DROP TABLE phase3
+
+# A column may have no declared type at all.
+statement ok
+CREATE TABLE untyped(x)
+
+statement ok
+DROP TABLE untyped
+
+# Multi-word types parse as one type.
+statement ok
+CREATE TABLE widetypes(a DOUBLE PRECISION, b DECIMAL(10,5), c UNSIGNED BIG INT)
+
+statement ok
+DROP TABLE widetypes

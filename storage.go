@@ -1,12 +1,20 @@
 package kite
 
-// Row is one row of a table: the column values, in the order the table
+import "github.com/sanke08/kite/internal/sql/value"
+
+// Row is one row of a table: its column values, in the order the table
 // declares them.
 //
-// WHY: []any rather than a struct or a map. Column types are not known until
-// runtime, and SQL values carry their own type — so a static struct cannot
-// describe a row and a map would lose column order.
-type Row []any
+// EG: for CREATE TABLE t(a INTEGER, b TEXT), the row (1, 'one') is
+//
+//	Row{value.Integer(1), value.Text("one")}
+//
+// WHY a slice of Value, not a struct and not a map: column types are not known
+// until a CREATE TABLE runs at runtime, so no static struct can describe a
+// row. A map would work but loses column order, which SELECT * needs. And the
+// element type is value.Value rather than any, so nothing downstream has to
+// type-assert before it can compare or add two of them.
+type Row []value.Value
 
 // RowID identifies a row within one table. Every table row has one, assigned
 // by the storage layer, and it is what a secondary index points at.
