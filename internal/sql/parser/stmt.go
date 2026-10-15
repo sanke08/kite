@@ -28,6 +28,8 @@ func (parser *Parser) ParseStmt() (ast.Stmt, error) {
 		return parser.parseCreate()
 	case "DROP":
 		return parser.parseDrop()
+	case "INSERT":
+		return parser.parseInsert()
 	case "SELECT":
 		return parser.parseSelect()
 	}
@@ -183,10 +185,16 @@ func (parser *Parser) parseDrop() (ast.Stmt, error) {
 	return &ast.DropTable{Name: name}, nil
 }
 
-// parseSelect handles SELECT with a list of expressions and no FROM.
+// parseSelect handles SELECT columns [FROM table].
 //
-// TEMPORARY: no FROM clause, because there is nothing to select from until
-// tables can hold rows. The expression list is real, so SELECT 1+2, 'x' works.
+// EG: the three shapes that work
+//
+//	SELECT 1+2         Columns [Binary{+}],  From ""
+//	SELECT * FROM t    Columns [Star{}],     From "t"
+//	SELECT a, b FROM t Columns [Column, Column], From "t"
+//
+// TEMPORARY: FROM takes one bare table name. It becomes a join tree when
+// there is a second table to read.
 func (parser *Parser) parseSelect() (ast.Stmt, error) {
 	if err := parser.advance(); err != nil { // consume SELECT
 		return nil, err
@@ -194,7 +202,7 @@ func (parser *Parser) parseSelect() (ast.Stmt, error) {
 
 	var columns []ast.Expr
 	for {
-		expression, err := parser.parseExpr(0)
+		expression, err := parser.parseSelectColumn()
 		if err != nil {
 			return nil, err
 		}
@@ -207,10 +215,152 @@ func (parser *Parser) parseSelect() (ast.Stmt, error) {
 			return nil, err
 		}
 	}
+
+	from, err := parser.parseFrom()
+	if err != nil {
+		return nil, err
+	}
 	if err := parser.expectEnd(); err != nil {
 		return nil, err
 	}
-	return &ast.Select{Columns: columns}, nil
+	return &ast.Select{Columns: columns, From: from}, nil
+}
+
+// parseSelectColumn reads one entry of the select list.
+//
+// WHY * is handled here and not in parseExpr: a bare * is only meaningful in a
+// select list. Inside an expression the same token is multiplication, and
+// parseExpr must keep reading it that way — otherwise "SELECT a*b" would
+// parse the * as a wildcard and then fail on the b.
+func (parser *Parser) parseSelectColumn() (ast.Expr, error) {
+	if parser.current.Type == scanner.Star {
+		if err := parser.advance(); err != nil {
+			return nil, err
+		}
+		return &ast.Star{}, nil
+	}
+	return parser.parseExpr(0)
+}
+
+// parseFrom reads an optional FROM clause, returning "" when absent.
+func (parser *Parser) parseFrom() (string, error) {
+	if parser.current.Type != scanner.Keyword || parser.current.Text != "FROM" {
+		return "", nil
+	}
+	if err := parser.advance(); err != nil {
+		return "", err
+	}
+	return parser.parseName()
+}
+
+// parseInsert handles INSERT INTO name [(columns)] VALUES (...), (...).
+//
+// EG: INSERT INTO t VALUES (1, 'one'), (2, 'two')  -> two rows in one statement
+func (parser *Parser) parseInsert() (ast.Stmt, error) {
+	if err := parser.advance(); err != nil { // consume INSERT
+		return nil, err
+	}
+	if err := parser.expectKeyword("INTO"); err != nil {
+		return nil, err
+	}
+
+	table, err := parser.parseName()
+	if err != nil {
+		return nil, err
+	}
+
+	// An optional column list. Without it, values match the table's columns
+	// in declaration order.
+	var columns []string
+	if parser.current.Type == scanner.LeftParen {
+		columns, err = parser.parseNameList()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := parser.expectKeyword("VALUES"); err != nil {
+		return nil, err
+	}
+
+	var rows [][]ast.Expr
+	for {
+		row, err := parser.parseValueRow()
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, row)
+
+		if parser.current.Type != scanner.Comma {
+			break
+		}
+		if err := parser.advance(); err != nil {
+			return nil, err
+		}
+	}
+	if err := parser.expectEnd(); err != nil {
+		return nil, err
+	}
+	return &ast.Insert{Table: table, Columns: columns, Rows: rows}, nil
+}
+
+// parseNameList reads a parenthesised list of names: (a, b, c).
+func (parser *Parser) parseNameList() ([]string, error) {
+	if err := parser.advance(); err != nil { // consume (
+		return nil, err
+	}
+
+	var names []string
+	for {
+		name, err := parser.parseName()
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, name)
+
+		if parser.current.Type != scanner.Comma {
+			break
+		}
+		if err := parser.advance(); err != nil {
+			return nil, err
+		}
+	}
+
+	if parser.current.Type != scanner.RightParen {
+		return nil, parser.errorf("expected , or ) in column list, found %s", parser.current)
+	}
+	return names, parser.advance()
+}
+
+// parseValueRow reads one parenthesised row of VALUES: (1, 'one').
+func (parser *Parser) parseValueRow() ([]ast.Expr, error) {
+	if parser.current.Type != scanner.LeftParen {
+		return nil, parser.errorf("expected ( to start a row of values, found %s", parser.current)
+	}
+	if err := parser.advance(); err != nil {
+		return nil, err
+	}
+
+	var row []ast.Expr
+	for {
+		expression, err := parser.parseExpr(0)
+		if err != nil {
+			return nil, err
+		}
+		row = append(row, expression)
+
+		if parser.current.Type != scanner.Comma {
+			break
+		}
+		if err := parser.advance(); err != nil {
+			return nil, err
+		}
+	}
+
+	if parser.current.Type != scanner.RightParen {
+		return nil, parser.errorf("expected , or ) in values, found %s", parser.current)
+	}
+	return row, parser.advance()
 }
 
 // parseName reads a table or column name.

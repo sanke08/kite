@@ -241,6 +241,18 @@ func (parser *Parser) parsePrefix() (ast.Expr, error) {
 		}
 		return &ast.Literal{Value: value.Text(token.Text)}, nil
 
+	case scanner.Identifier:
+		// A bare name in an expression is a column reference.
+		//
+		// WHY it becomes a node holding a NAME rather than a resolved column
+		// position: the parser has no catalog, so it cannot know that t has a
+		// column called a, let alone which slot it sits in. Resolving names
+		// against a table is a separate pass with the catalog in hand.
+		if err := parser.advance(); err != nil {
+			return nil, err
+		}
+		return &ast.Column{Name: token.Text}, nil
+
 	case scanner.Minus:
 		if err := parser.advance(); err != nil {
 			return nil, err

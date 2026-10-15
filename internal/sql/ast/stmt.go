@@ -61,13 +61,50 @@ type DropTable struct {
 
 func (dropTable *DropTable) stmtNode() {}
 
+// Insert is INSERT INTO name VALUES (...), (...).
+//
+// EG: INSERT INTO t VALUES (1, 'one'), (2, 'two')
+//
+//	Table: "t"
+//	Rows:  [[Literal{1}, Literal{'one'}],
+//	        [Literal{2}, Literal{'two'}]]
+//
+// WHY Rows is a slice of slices rather than one flat list: a single INSERT can
+// carry several rows, and the row boundaries matter — three values could mean
+// one 3-column row or three 1-column rows, and only the grouping says which.
+type Insert struct {
+	Table string
+
+	// Columns names the target columns, or is empty for "all of them, in
+	// declaration order".
+	//
+	// EG: INSERT INTO t(b, a) VALUES ('x', 1)  -> Columns ["b", "a"]
+	//     INSERT INTO t VALUES (1, 'x')        -> Columns nil
+	//
+	// The order given here is the order the VALUES match, which is why "b, a"
+	// puts 'x' in b and 1 in a.
+	Columns []string
+
+	Rows [][]Expr
+}
+
+func (insert *Insert) stmtNode() {}
+
 // Select is a SELECT statement.
 //
-// TEMPORARY: it holds only a list of expressions, because there is nowhere to
-// select FROM yet. A From field and a Where field arrive with the operators
-// that can use them.
+// EG: SELECT * FROM t
+//
+//	Columns: [Star{}]
+//	From:    "t"
+//
+// TEMPORARY: From is a bare table name, not a join tree. It becomes a real
+// FROM clause when there is more than one table to read from.
 type Select struct {
 	Columns []Expr
+
+	// From is the table to read, or "" for a SELECT with no FROM at all —
+	// which produces exactly one row from the expressions alone.
+	From string
 }
 
 func (selectStmt *Select) stmtNode() {}

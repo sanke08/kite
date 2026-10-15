@@ -181,3 +181,40 @@ func (isNull *IsNull) String() string {
 }
 
 func (isNull *IsNull) exprNode() {}
+
+// Star is the * in SELECT * FROM t.
+//
+// WHY it is an expression node rather than being expanded during parsing: the
+// parser does not know what columns a table has — only the catalog does, and
+// the catalog is not reachable from here. So * survives as a node and gets
+// replaced by the real column list at execution time, where the table's shape
+// is known.
+//
+// TRAP: expanding it in the parser would need the parser to hold a catalog,
+// which puts schema knowledge into a component whose only job is grammar. It
+// also breaks the moment a query names a table the parser has not read yet.
+type Star struct{}
+
+func (star *Star) String() string {
+	return "*"
+}
+
+func (star *Star) exprNode() {}
+
+// Column is a bare column reference: the a in SELECT a FROM t.
+//
+// EG: SELECT a FROM t   ->  Column{Name: "a"}
+//
+// TEMPORARY: it holds a name, not a resolved position. Turning a name into a
+// column index needs the table's shape, and doing that lookup once per query
+// instead of once per row is what the binder is for. Until then the executor
+// resolves it by name on every row, which is correct and wasteful.
+type Column struct {
+	Name string
+}
+
+func (column *Column) String() string {
+	return column.Name
+}
+
+func (column *Column) exprNode() {}

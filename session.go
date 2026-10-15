@@ -7,6 +7,7 @@ import (
 	"github.com/sanke08/kite/internal/sql/ast"
 	"github.com/sanke08/kite/internal/sql/catalog"
 	"github.com/sanke08/kite/internal/sql/eval"
+	"github.com/sanke08/kite/internal/sql/exec"
 	"github.com/sanke08/kite/internal/sql/parser"
 	"github.com/sanke08/kite/internal/sql/value"
 )
@@ -73,6 +74,8 @@ func (db *DB) Exec(sql string) (*Result, error) {
 		return db.execCreateTable(node)
 	case *ast.DropTable:
 		return db.execDropTable(node)
+	case *ast.Insert:
+		return db.execInsert(node)
 	case *ast.Select:
 		return db.execSelect(node)
 	}
@@ -109,28 +112,205 @@ func (db *DB) execDropTable(node *ast.DropTable) (*Result, error) {
 	return &Result{}, nil
 }
 
-// execSelect evaluates each expression in the select list.
+// execInsert evaluates each row of VALUES and stores it.
 //
-// TEMPORARY: no FROM, so this always produces exactly one row. It becomes a
-// scan over a real table once tables can hold rows.
-func (db *DB) execSelect(node *ast.Select) (*Result, error) {
-	result := &Result{}
-	row := make(Row, len(node.Columns))
+// EG: INSERT INTO t(b, a) VALUES ('x', 1) on t(a INTEGER, b TEXT)
+//
+//	the column list says value 'x' goes to b and 1 goes to a,
+//	so the stored row is Row{Integer(1), Text("x")} — in TABLE order,
+//	not in the order the values were written
+func (db *DB) execInsert(node *ast.Insert) (*Result, error) {
+	schema, ok := db.catalog.Lookup(node.Table)
+	if !ok {
+		return nil, fmt.Errorf("no such table: %s", node.Table)
+	}
+	table := db.tables[strings.ToLower(node.Table)]
 
-	for index, expression := range node.Columns {
-		computed, err := eval.Expr(expression)
+	// targets[i] is the table column that value i of each row belongs to.
+	targets, err := insertTargets(schema, node.Columns)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, valueRow := range node.Rows {
+		if len(valueRow) != len(targets) {
+			return nil, fmt.Errorf("table %s has %d columns but %d values were supplied",
+				schema.Name, len(targets), len(valueRow))
+		}
+
+		// A row starts as all NULL, so a column the INSERT did not name
+		// stays NULL rather than being absent — every stored row has one
+		// value per table column, which is what lets a scan read positionally.
+		row := make(Row, len(schema.Columns))
+		for index := range row {
+			row[index] = value.Null()
+		}
+
+		for position, expression := range valueRow {
+			computed, err := eval.Expr(expression)
+			if err != nil {
+				return nil, err
+			}
+			row[targets[position]] = computed
+		}
+
+		if _, err := table.Insert(row); err != nil {
+			return nil, err
+		}
+	}
+	return &Result{}, nil
+}
+
+// insertTargets maps each supplied value position to a table column index.
+//
+// EG: on t(a, b, c)
+//
+//	INSERT INTO t VALUES (...)          -> [0, 1, 2]  all columns, in order
+//	INSERT INTO t(c, a) VALUES (...)    -> [2, 0]     value 1 -> c, value 2 -> a
+func insertTargets(schema *catalog.Table, named []string) ([]int, error) {
+	if len(named) == 0 {
+		targets := make([]int, len(schema.Columns))
+		for index := range targets {
+			targets[index] = index
+		}
+		return targets, nil
+	}
+
+	targets := make([]int, len(named))
+	for position, name := range named {
+		index, ok := schema.ColumnIndex(name)
+		if !ok {
+			return nil, fmt.Errorf("no such column: %s", name)
+		}
+		targets[position] = index
+	}
+	return targets, nil
+}
+
+// execSelect plans the query into an operator tree, then drains it.
+//
+// EG: SELECT * FROM t builds
+//
+//	Project{[Star]}
+//	  SeqScan{t}
+//
+// and SELECT 1+2 with no FROM builds a Project over a single-row source,
+// because an expression with nothing to read from still produces one row.
+func (db *DB) execSelect(node *ast.Select) (*Result, error) {
+	plan, err := db.plan(node)
+	if err != nil {
+		return nil, err
+	}
+	return drain(plan)
+}
+
+// plan turns a parsed SELECT into an operator tree.
+//
+// WHY planning is separate from running: the tree can be built and printed
+// without reading a single row, and the same tree is what a later optimiser
+// rewrites. Mixing the two would mean any change to plan shape touches
+// execution too.
+func (db *DB) plan(node *ast.Select) (exec.Operator, error) {
+	var source exec.Operator
+	var inputColumns []string
+
+	if node.From == "" {
+		// No table: one empty row, so the expressions evaluate exactly once.
+		source = exec.NewSingleRow()
+	} else {
+		schema, ok := db.catalog.Lookup(node.From)
+		if !ok {
+			return nil, fmt.Errorf("no such table: %s", node.From)
+		}
+		for _, column := range schema.Columns {
+			inputColumns = append(inputColumns, column.Name)
+		}
+		source = exec.NewSeqScan(rowSource{db.tables[strings.ToLower(node.From)]}, inputColumns)
+	}
+
+	outputColumns, err := outputNames(node.Columns, inputColumns)
+	if err != nil {
+		return nil, err
+	}
+	return exec.NewProject(source, node.Columns, outputColumns), nil
+}
+
+// outputNames works out the result's column headers.
+//
+// EG: on t(a, b)
+//
+//	SELECT *      -> ["a", "b"]     the star expands to the table's columns
+//	SELECT a+1    -> ["a+1"]        the expression's own text, as SQLite does
+func outputNames(expressions []ast.Expr, inputColumns []string) ([]string, error) {
+	var names []string
+	for _, expression := range expressions {
+		if _, isStar := expression.(*ast.Star); isStar {
+			if len(inputColumns) == 0 {
+				return nil, fmt.Errorf("no tables specified")
+			}
+			names = append(names, inputColumns...)
+			continue
+		}
+		names = append(names, expression.String())
+	}
+	return names, nil
+}
+
+// drain pulls every row out of a plan.
+//
+// TEMPORARY: it materialises the whole result before returning, which is fine
+// for a REPL printing to a terminal and wrong for a million-row table. The
+// operator tree already streams; only this caller does not.
+func drain(plan exec.Operator) (*Result, error) {
+	if err := plan.Open(); err != nil {
+		return nil, err
+	}
+	defer plan.Close()
+
+	result := &Result{Columns: plan.Columns()}
+	for {
+		row, err := plan.Next()
 		if err != nil {
 			return nil, err
 		}
-		row[index] = computed
+		if row == nil {
+			return result, nil
+		}
 
-		// The column's name is the expression's own text, which is what
-		// SQLite does for an expression with no AS alias.
-		result.Columns = append(result.Columns, expression.String())
+		// Copy: the operator may reuse its output buffer for the next row.
+		stored := make(Row, len(row))
+		for index, cell := range row {
+			stored[index] = cell
+		}
+		result.Rows = append(result.Rows, stored)
 	}
+}
 
-	result.Rows = append(result.Rows, row)
-	return result, nil
+// rowSource adapts a storage Table to what SeqScan asks for.
+//
+// WHY an adapter rather than making Table satisfy exec.RowSource directly:
+// exec sits below this package, so it cannot name Table, and Table cannot name
+// exec.Row without a cycle. Four lines here keep both sides ignorant of each
+// other.
+type rowSource struct {
+	table Table
+}
+
+func (source rowSource) ScanRows() exec.RowCursor {
+	return rowCursor{source.table.Scan()}
+}
+
+type rowCursor struct {
+	cursor Cursor
+}
+
+func (wrapper rowCursor) Next() bool { return wrapper.cursor.Next() }
+func (wrapper rowCursor) Err() error { return wrapper.cursor.Err() }
+
+func (wrapper rowCursor) Close() error { return wrapper.cursor.Close() }
+
+func (wrapper rowCursor) Row() exec.Row {
+	return exec.Row(wrapper.cursor.Row())
 }
 
 // Tables lists every table name, sorted. Backs the .tables dot-command.

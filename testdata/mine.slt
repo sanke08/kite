@@ -229,3 +229,90 @@ CREATE TABLE widetypes(a DOUBLE PRECISION, b DECIMAL(10,5), c UNSIGNED BIG INT)
 
 statement ok
 DROP TABLE widetypes
+
+# ---- Phase 4: INSERT and SELECT * FROM t ----
+
+statement ok
+CREATE TABLE p4(a INTEGER, b TEXT, c)
+
+statement ok
+INSERT INTO p4 VALUES (1, 'one', 2.5)
+
+statement ok
+INSERT INTO p4 VALUES (2, 'two', NULL)
+
+# Rows come back in insertion order.
+query IT nosort
+SELECT a, b FROM p4
+----
+1
+one
+2
+two
+
+# Several rows in one statement.
+statement ok
+INSERT INTO p4 VALUES (3, 'three', 1), (4, 'four', 2)
+
+query I nosort
+SELECT a FROM p4
+----
+1
+2
+3
+4
+
+# A named column list fills only those columns; the rest stay NULL.
+statement ok
+INSERT INTO p4(c, a) VALUES (99, 7)
+
+query IT nosort
+SELECT a, b FROM p4
+----
+1
+one
+2
+two
+3
+three
+4
+four
+7
+NULL
+
+# Expressions are computed per row.
+query I nosort
+SELECT a*10 FROM p4
+----
+10
+20
+30
+40
+70
+
+# Columns can be reordered in the select list.
+query TI nosort
+SELECT b, a FROM p4
+----
+one
+1
+two
+2
+three
+3
+four
+4
+NULL
+7
+
+statement error
+SELECT * FROM nosuchtable
+
+statement error
+SELECT nosuchcolumn FROM p4
+
+statement error
+INSERT INTO p4 VALUES (1)
+
+statement ok
+DROP TABLE p4
